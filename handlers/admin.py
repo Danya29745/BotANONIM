@@ -34,6 +34,7 @@ def admin_menu_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="📊 Статистика", callback_data="admin:stats")],
         [InlineKeyboardButton(text="📣 Рассылка", callback_data="admin:broadcast")],
         [InlineKeyboardButton(text="📢 Каналы", callback_data="admin:channels")],
+        [InlineKeyboardButton(text="🕵️ Лента переписки", callback_data="admin:feed:0")],
     ])
 
 
@@ -252,4 +253,64 @@ async def cb_del_channel(call: CallbackQuery):
         "📢 <b>Спонсорские каналы</b>\n\n✅ Канал удалён.",
         parse_mode="HTML",
         reply_markup=channels_kb(channels)
+    )
+
+
+# ─── Feed — кто кому что отправлял ────────────────────────────────────────────
+
+FEED_PAGE_SIZE = 8
+
+
+def feed_kb(offset: int, total: int) -> InlineKeyboardMarkup:
+    rows = []
+    nav = []
+    if offset > 0:
+        nav.append(InlineKeyboardButton(text="◀️ Назад", callback_data=f"admin:feed:{offset - FEED_PAGE_SIZE}"))
+    if offset + FEED_PAGE_SIZE < total:
+        nav.append(InlineKeyboardButton(text="Вперёд ▶️", callback_data=f"admin:feed:{offset + FEED_PAGE_SIZE}"))
+    if nav:
+        rows.append(nav)
+    rows.append([InlineKeyboardButton(text="🔙 В меню", callback_data="admin:menu")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+@router.callback_query(F.data.startswith("admin:feed:"))
+async def cb_feed(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔")
+        return
+    await call.answer()
+
+    offset = int(call.data.split(":")[2])
+    all_qs = db.get_recent_questions_admin(limit=200)
+    total = len(all_qs)
+    page = all_qs[offset: offset + FEED_PAGE_SIZE]
+
+    if not page:
+        await call.message.edit_text(
+            "📭 <b>Лента переписки пуста.</b>",
+            parse_mode="HTML",
+            reply_markup=back_kb()
+        )
+        return
+
+    lines = [f"🕵️ <b>Лента переписки</b>  ({offset + 1}–{min(offset + FEED_PAGE_SIZE, total)} из {total})\n"]
+    for q in page:
+        asker = q.get("asker_name") or "Аноним"
+        asker_u = f" (@{q['asker_username']})" if q.get("asker_username") else ""
+        owner = q.get("owner_name") or "Неизвестно"
+        owner_u = f" (@{q['owner_username']})" if q.get("owner_username") else ""
+        answered = "✅" if q.get("answer_text") else "⏳"
+
+        preview = q["question_text"][:60] + ("…" if len(q["question_text"]) > 60 else "")
+        lines.append(
+            f"{answered} <b>#{q['id']}</b>\n"
+            f"  ✉️ <b>{asker}{asker_u}</b> → <b>{owner}{owner_u}</b>\n"
+            f"  <i>{preview}</i>\n"
+        )
+
+    await call.message.edit_text(
+        "\n".join(lines),
+        parse_mode="HTML",
+        reply_markup=feed_kb(offset, total)
     )
