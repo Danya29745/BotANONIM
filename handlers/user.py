@@ -1,5 +1,8 @@
 from aiogram import Router, Bot, F
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram.types import (
+    Message, InlineKeyboardMarkup, InlineKeyboardButton,
+    CallbackQuery, LabeledPrice, PreCheckoutQuery
+)
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -9,6 +12,8 @@ from config import BOT_USERNAME, ADMIN_ID, WELCOME_PHOTO
 
 router = Router()
 
+REVEAL_PRICE = 299  # Telegram Stars
+
 
 class AskState(StatesGroup):
     waiting_question = State()
@@ -17,7 +22,6 @@ class AskState(StatesGroup):
 # ─── HELPERS ──────────────────────────────────────────────────────────────────
 
 async def check_subscriptions(bot: Bot, user_id: int) -> list[dict]:
-    """Returns list of channels user is NOT subscribed to."""
     channels = db.get_all_channels()
     not_subbed = []
     for ch in channels:
@@ -50,6 +54,13 @@ def my_link_keyboard(token: str) -> InlineKeyboardMarkup:
     ]])
 
 
+def question_keyboard(qid: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="✉️ Ответить", callback_data=f"reply:{qid}"),
+        InlineKeyboardButton(text="🕵️ Узнать автора", callback_data=f"reveal:{qid}"),
+    ]])
+
+
 # ─── /start ───────────────────────────────────────────────────────────────────
 
 @router.message(CommandStart())
@@ -62,10 +73,8 @@ async def cmd_start(message: Message, bot: Bot, state: FSMContext):
     args = message.text.split(maxsplit=1)
     token_arg = args[1].strip() if len(args) > 1 else None
 
-    # Register user
     user_data = db.get_or_create_user(user_id, username, full_name)
 
-    # Check sponsor subscriptions
     not_subbed = await check_subscriptions(bot, user_id)
     if not_subbed:
         payload = token_arg or ""
@@ -77,7 +86,6 @@ async def cmd_start(message: Message, bot: Bot, state: FSMContext):
         )
         return
 
-    # Came via someone's link — ask a question
     if token_arg and token_arg != user_data["link_token"]:
         owner = db.get_user_by_token(token_arg)
         if owner:
@@ -93,7 +101,6 @@ async def cmd_start(message: Message, bot: Bot, state: FSMContext):
         else:
             await message.answer("❌ Ссылка недействительна.")
 
-    # Regular /start — show own link
     token = user_data["link_token"]
     link = f"https://t.me/{BOT_USERNAME}?start={token}"
     text = (
@@ -111,11 +118,7 @@ async def cmd_start(message: Message, bot: Bot, state: FSMContext):
             reply_markup=my_link_keyboard(token)
         )
     else:
-        await message.answer(
-            text,
-            parse_mode="HTML",
-            reply_markup=my_link_keyboard(token)
-        )
+        await message.answer(text, parse_mode="HTML", reply_markup=my_link_keyboard(token))
 
 
 # ─── Check subscription callback ──────────────────────────────────────────────
@@ -132,7 +135,6 @@ async def callback_check_sub(call: CallbackQuery, bot: Bot, state: FSMContext):
         await call.message.answer("❗ Ты ещё не подписался на все каналы. Подпишись и нажми кнопку снова.")
         return
 
-    # Subscribed — redirect
     user_data = db.get_or_create_user(
         user_id,
         call.from_user.username or "",
@@ -178,15 +180,145 @@ async def receive_question(message: Message, state: FSMContext, bot: Bot):
     qid = db.save_question(owner_id, asker_id, text)
     await state.clear()
 
-    # Forward to owner
-    kb = InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="✉️ Ответить", callback_data=f"reply:{qid}")
-    ]])
+    # Deanon mode: show asker identity if enabled
+    deanon = db.get_deanon_mode(owner_id)
+    if deanon and asker_id:
+        asker = db.get_user_by_id(asker_id)
+        if asker:
+            a_name = asker.get("full_name") or "Без имени"
+            a_uname = f" (@{asker['username']})" if asker.get("username") else ""
+            deanon_line = f"\n\n👤 <b>Отправитель:</b> {a_name}{a_uname}"
+        else:
+            deanon_line = ""
+    else:
+        deanon_line = ""
+
     await bot.send_message(
         owner_id,
-        f"📩 <b>Новый анонимный вопрос #{qid}</b>\n\n{text}",
+        f"📩 <b>Новый анонимный вопрос #{qid}</b>\n\n{text}{deanon_line}",
         parse_mode="HTML",
-        reply_markup=kb
+        reply_markup=question_keyboard(qid)
     )
 
     await message.answer("✅ Твой вопрос отправлен анонимно! Ответ придёт сюда, если владелец ответит.")
+
+
+# ─── /qs — deanon mode toggle ─────────────────────────────────────────────────
+
+@router.message(Command("qs"))
+async def cmd_qs(message: Message):
+    user_id = message.from_user.id
+
+    current = db.get_deanon_mode(user_id)
+    new_state = not current
+    db.set_deanon_mode(user_id, new_state)
+
+    if not new_state:
+        await message.answer(
+            "🔒 <b>Режим деанона ВЫКЛЮЧЕН.</b>\n\n"
+            "Теперь новые вопросы будут приходить без информации об отправителе.",
+            parse_mode="HTML"
+        )
+        return
+
+    await message.answer(
+        "🔓 <b>Режим деанона ВКЛЮЧЁН.</b>\n\n"
+        "Теперь при каждом новом вопросе ты увидишь, кто его задал. "
+        "Отправители по-прежнему думают, что анонимны.\n\n"
+        "Чтобы выключить — отправь /qs ещё раз.",
+        parse_mode="HTML"
+    )
+
+    questions = db.get_questions_for_owner(user_id, limit=10)
+
+    if not questions:
+        await message.answer("📭 Вопросов пока нет — но как только появятся, ты сразу узнаешь кто.")
+        return
+
+    lines = ["👁 <b>Последние вопросы — личности раскрыты:</b>\n"]
+    for q in questions:
+        asker = db.get_user_by_id(q["asker_id"]) if q["asker_id"] else None
+        if asker:
+            name = asker.get("full_name") or "Без имени"
+            uname = f" (@{asker['username']})" if asker.get("username") else ""
+            asker_str = f"{name}{uname}"
+        else:
+            asker_str = "Удалённый аккаунт"
+
+        answered = "✅" if q["answer_text"] else "⏳"
+        lines.append(
+            f"{answered} <b>#{q['id']}</b> — <b>{asker_str}</b>\n"
+            f"<i>{q['question_text'][:80]}{'...' if len(q['question_text']) > 80 else ''}</i>\n"
+        )
+
+    await message.answer("\n".join(lines), parse_mode="HTML")
+
+
+# ─── Reveal identity — send invoice ───────────────────────────────────────────
+
+@router.callback_query(F.data.startswith("reveal:"))
+async def cb_reveal(call: CallbackQuery, bot: Bot):
+    await call.answer()
+    qid = int(call.data.split(":")[1])
+    question = db.get_question(qid)
+
+    if not question:
+        await call.message.answer("❌ Вопрос не найден.")
+        return
+
+    if question["owner_id"] != call.from_user.id:
+        await call.message.answer("⛔ Это не твой вопрос.")
+        return
+
+    if question["identity_revealed"]:
+        asker = db.get_user_by_id(question["asker_id"]) if question["asker_id"] else None
+        if asker:
+            name = asker.get("full_name") or "Неизвестно"
+            uname = f" @{asker['username']}" if asker.get("username") else ""
+            await call.message.answer(
+                f"ℹ️ Автор вопроса #{qid}: <b>{name}</b>{uname}",
+                parse_mode="HTML"
+            )
+        return
+
+    await bot.send_invoice(
+        chat_id=call.from_user.id,
+        title="🕵️ Узнать автора вопроса",
+        description=f"Раскрыть личность автора анонимного вопроса #{qid}",
+        payload=f"reveal_identity:{qid}",
+        currency="XTR",
+        prices=[LabeledPrice(label="Звёзды", amount=REVEAL_PRICE)],
+        provider_token=""
+    )
+
+
+# ─── Pre-checkout ──────────────────────────────────────────────────────────────
+
+@router.pre_checkout_query()
+async def pre_checkout(query: PreCheckoutQuery):
+    await query.answer(ok=True)
+
+
+# ─── Successful payment ───────────────────────────────────────────────────────
+
+@router.message(F.successful_payment)
+async def successful_payment(message: Message):
+    payload = message.successful_payment.invoice_payload
+
+    if payload.startswith("reveal_identity:"):
+        qid = int(payload.split(":")[1])
+        question = db.get_question(qid)
+
+        if question and question["asker_id"]:
+            db.mark_identity_revealed(qid)
+            asker = db.get_user_by_id(question["asker_id"])
+            if asker:
+                name = asker.get("full_name") or "Неизвестно"
+                uname = f" @{asker['username']}" if asker.get("username") else ""
+                tg_link = f' <a href="tg://user?id={asker["user_id"]}">открыть профиль</a>'
+                await message.answer(
+                    f"✅ Оплата прошла!\n\n"
+                    f"🕵️ Автор вопроса <b>#{qid}</b>:\n"
+                    f"<b>{name}</b>{uname}\n{tg_link}",
+                    parse_mode="HTML"
+                )
