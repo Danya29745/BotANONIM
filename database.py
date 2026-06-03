@@ -201,6 +201,29 @@ def count_answers():
     return c
 
 
+def get_user_stats(user_id: int) -> dict:
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM questions WHERE owner_id = ?", (user_id,))
+    received = cur.fetchone()[0]
+    cur.execute("SELECT COUNT(*) FROM questions WHERE owner_id = ? AND answer_text IS NOT NULL", (user_id,))
+    answered = cur.fetchone()[0]
+    cur.execute("SELECT COUNT(*) FROM questions WHERE asker_id = ?", (user_id,))
+    sent = cur.fetchone()[0]
+    conn.close()
+    return {"received": received, "answered": answered, "sent": sent}
+
+
+def regenerate_token(user_id: int) -> str:
+    conn = get_conn()
+    cur = conn.cursor()
+    new_token = uuid.uuid4().hex[:12]
+    cur.execute("UPDATE users SET link_token = ? WHERE user_id = ?", (new_token, user_id))
+    conn.commit()
+    conn.close()
+    return new_token
+
+
 def get_questions_for_owner(owner_id: int, limit: int = 20) -> list[dict]:
     """Get questions received by the owner, newest first."""
     conn = get_conn()
