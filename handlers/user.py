@@ -1,7 +1,8 @@
 from aiogram import Router, Bot, F
 from aiogram.types import (
     Message, InlineKeyboardMarkup, InlineKeyboardButton,
-    CallbackQuery, LabeledPrice, PreCheckoutQuery
+    CallbackQuery, LabeledPrice, PreCheckoutQuery,
+    ReplyKeyboardMarkup, KeyboardButton
 )
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
@@ -52,6 +53,14 @@ def my_link_keyboard(token: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="🔗 Моя ссылка", url=f"https://t.me/{BOT_USERNAME}?start={token}")
     ]])
+
+
+def main_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="🔗 Моя анонимка — поделиться ссылкой")]],
+        resize_keyboard=True,
+        one_time_keyboard=False
+    )
 
 
 def question_keyboard(qid: int) -> InlineKeyboardMarkup:
@@ -119,6 +128,11 @@ async def cmd_start(message: Message, bot: Bot, state: FSMContext):
         )
     else:
         await message.answer(text, parse_mode="HTML", reply_markup=my_link_keyboard(token))
+
+    await message.answer(
+        "👇 Кнопка ниже всегда под рукой — нажми чтобы получить свою ссылку.",
+        reply_markup=main_keyboard()
+    )
 
 
 # ─── Check subscription callback ──────────────────────────────────────────────
@@ -201,6 +215,26 @@ async def receive_question(message: Message, state: FSMContext, bot: Bot):
     )
 
     await message.answer("✅ Твой вопрос отправлен анонимно! Ответ придёт сюда, если владелец ответит.")
+
+
+# ─── Кнопка "Моя анонимка" ────────────────────────────────────────────────────
+
+@router.message(F.text == "🔗 Моя анонимка — поделиться ссылкой")
+async def btn_my_link(message: Message):
+    user_id = message.from_user.id
+    user_data = db.get_user_by_id(user_id)
+    if not user_data:
+        await message.answer("❌ Сначала отправь /start.")
+        return
+    token = user_data["link_token"]
+    link = f"https://t.me/{BOT_USERNAME}?start={token}"
+    await message.answer(
+        f"🔗 Вот твоя личная ссылка для анонимных вопросов:\n\n"
+        f"<code>{link}</code>\n\n"
+        f"📲 Скопируй и поделись с друзьями — пусть пишут!",
+        parse_mode="HTML",
+        reply_markup=my_link_keyboard(token)
+    )
 
 
 # ─── /qs — deanon mode toggle ─────────────────────────────────────────────────
