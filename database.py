@@ -19,7 +19,8 @@ def init_db():
             username    TEXT,
             full_name   TEXT,
             link_token  TEXT UNIQUE,
-            joined_at   TEXT DEFAULT (datetime('now'))
+            joined_at   TEXT DEFAULT (datetime('now')),
+            deanon_mode INTEGER DEFAULT 0
         );
 
         CREATE TABLE IF NOT EXISTS questions (
@@ -50,6 +51,35 @@ def init_db():
         );
     """)
 
+    conn.commit()
+    conn.close()
+
+    # Migration: add deanon_mode column if missing (for existing databases)
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute("ALTER TABLE users ADD COLUMN deanon_mode INTEGER DEFAULT 0")
+        conn.commit()
+    except Exception:
+        pass  # Column already exists
+    conn.close()
+
+
+# ─── DEANON MODE ──────────────────────────────────────────────────────────────
+
+def get_deanon_mode(user_id: int) -> bool:
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT deanon_mode FROM users WHERE user_id = ?", (user_id,))
+    row = cur.fetchone()
+    conn.close()
+    return bool(row["deanon_mode"]) if row else False
+
+
+def set_deanon_mode(user_id: int, enabled: bool):
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("UPDATE users SET deanon_mode = ? WHERE user_id = ?", (int(enabled), user_id))
     conn.commit()
     conn.close()
 
