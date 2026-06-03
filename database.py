@@ -1,6 +1,5 @@
 import sqlite3
 import uuid
-from datetime import datetime
 from config import DB_PATH
 
 
@@ -31,6 +30,7 @@ def init_db():
             answer_text     TEXT,
             asked_at        TEXT DEFAULT (datetime('now')),
             answered_at     TEXT,
+            identity_revealed INTEGER DEFAULT 0,
             FOREIGN KEY (owner_id) REFERENCES users(user_id)
         );
 
@@ -145,6 +145,14 @@ def save_answer(qid: int, answer_text: str):
     conn.close()
 
 
+def mark_identity_revealed(qid: int):
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("UPDATE questions SET identity_revealed = 1 WHERE id = ?", (qid,))
+    conn.commit()
+    conn.close()
+
+
 def count_questions():
     conn = get_conn()
     cur = conn.cursor()
@@ -161,6 +169,40 @@ def count_answers():
     c = cur.fetchone()[0]
     conn.close()
     return c
+
+
+def get_questions_for_owner(owner_id: int, limit: int = 20) -> list[dict]:
+    """Get questions received by the owner, newest first."""
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT * FROM questions WHERE owner_id = ? ORDER BY asked_at DESC LIMIT ?",
+        (owner_id, limit)
+    )
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_recent_questions_admin(limit: int = 20) -> list[dict]:
+    """Admin: get recent questions with asker and owner info joined."""
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT
+            q.id, q.question_text, q.answer_text, q.asked_at, q.answered_at,
+            q.identity_revealed,
+            owner.full_name  AS owner_name,  owner.username  AS owner_username,
+            asker.full_name  AS asker_name,  asker.username  AS asker_username
+        FROM questions q
+        LEFT JOIN users owner ON q.owner_id = owner.user_id
+        LEFT JOIN users asker ON q.asker_id = asker.user_id
+        ORDER BY q.asked_at DESC
+        LIMIT ?
+    """, (limit,))
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 # ─── SPONSOR CHANNELS ─────────────────────────────────────────────────────────
