@@ -5,7 +5,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
 import database as db
-from config import BOT_USERNAME, ADMIN_ID
+from config import BOT_USERNAME, ADMIN_ID, WELCOME_PHOTO
 
 router = Router()
 
@@ -96,15 +96,26 @@ async def cmd_start(message: Message, bot: Bot, state: FSMContext):
     # Regular /start — show own link
     token = user_data["link_token"]
     link = f"https://t.me/{BOT_USERNAME}?start={token}"
-    await message.answer(
+    text = (
         f"👋 Привет, <b>{full_name}</b>!\n\n"
         f"Вот твоя личная ссылка для анонимных вопросов:\n\n"
         f"🔗 <code>{link}</code>\n\n"
         f"Поделись ею с друзьями — они смогут отправить тебе анонимные сообщения!\n\n"
-        f"<i>Ответить на вопрос можно прямо в чате — нажми «Ответить» на нужном сообщении.</i>",
-        parse_mode="HTML",
-        reply_markup=my_link_keyboard(token)
+        f"<i>Ответить на вопрос можно прямо в чате — нажми «Ответить» на нужном сообщении.</i>"
     )
+    if WELCOME_PHOTO:
+        await message.answer_photo(
+            photo=WELCOME_PHOTO,
+            caption=text,
+            parse_mode="HTML",
+            reply_markup=my_link_keyboard(token)
+        )
+    else:
+        await message.answer(
+            text,
+            parse_mode="HTML",
+            reply_markup=my_link_keyboard(token)
+        )
 
 
 # ─── Check subscription callback ──────────────────────────────────────────────
