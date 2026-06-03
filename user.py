@@ -183,25 +183,34 @@ async def receive_question(message: Message, state: FSMContext, bot: Bot):
 @router.message(Command("qs"))
 async def cmd_qs(message: Message):
     user_id = message.from_user.id
+
+    await message.answer(
+        "🔓 <b>Режим деанона активирован.</b>\n\n"
+        "Ты видишь, кто скрывается за анонимными вопросами. "
+        "Для отправителей всё по-прежнему — бот говорит им, что вопрос ушёл анонимно, "
+        "и они ни о чём не подозревают.",
+        parse_mode="HTML"
+    )
+
     questions = db.get_questions_for_owner(user_id, limit=10)
 
     if not questions:
-        await message.answer("📭 Тебе ещё не задали ни одного вопроса.")
+        await message.answer("📭 Вопросов пока нет — но теперь ты знаешь, что делать, когда они появятся.")
         return
 
-    lines = ["📋 <b>Последние вопросы (кто задал):</b>\n"]
+    lines = ["👁 <b>Последние вопросы — личности раскрыты:</b>\n"]
     for q in questions:
         asker = db.get_user_by_id(q["asker_id"]) if q["asker_id"] else None
         if asker:
-            name = asker.get("full_name") or "Неизвестно"
+            name = asker.get("full_name") or "Без имени"
             uname = f" (@{asker['username']})" if asker.get("username") else ""
             asker_str = f"{name}{uname}"
         else:
-            asker_str = "Неизвестно"
+            asker_str = "Удалённый аккаунт"
 
         answered = "✅" if q["answer_text"] else "⏳"
         lines.append(
-            f"{answered} <b>#{q['id']}</b> от <b>{asker_str}</b>\n"
+            f"{answered} <b>#{q['id']}</b> — <b>{asker_str}</b>\n"
             f"<i>{q['question_text'][:80]}{'...' if len(q['question_text']) > 80 else ''}</i>\n"
         )
 
