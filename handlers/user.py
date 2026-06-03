@@ -113,11 +113,13 @@ async def cmd_start(message: Message, bot: Bot, state: FSMContext):
     token = user_data["link_token"]
     link = f"https://t.me/{BOT_USERNAME}?start={token}"
     text = (
-        f"👋 Привет, <b>{full_name}</b>!\n\n"
-        f"Вот твоя личная ссылка для анонимных вопросов:\n\n"
-        f"🔗 <code>{link}</code>\n\n"
-        f"Поделись ею с друзьями — они смогут отправить тебе анонимные сообщения!\n\n"
-        f"<i>Ответить на вопрос можно прямо в чате — нажми «Ответить» на нужном сообщении.</i>"
+        "👋 <b>Привет!</b> Добро пожаловать в <b>WhisperLink</b> — место, где говорят правду.\n\n"
+        "🤫 Здесь тебе могут написать анонимно — никто не узнает кто это был.\n"
+        "💌 Делись ссылкой, собирай вопросы, отвечай на них.\n\n"
+        "🔗 <b>Твоя личная ссылка:</b>\n"
+        f"<blockquote>{link}</blockquote>\n"
+        "Поделись ею — и пусть начнётся!\n\n"
+        "<i>💡 Команды: /mystats — твоя статистика, /link — обновить ссылку</i>"
     )
     if WELCOME_PHOTO:
         await message.answer_photo(
@@ -232,6 +234,48 @@ async def btn_my_link(message: Message):
         f"🔗 Вот твоя личная ссылка для анонимных вопросов:\n\n"
         f"<code>{link}</code>\n\n"
         f"📲 Скопируй и поделись с друзьями — пусть пишут!",
+        parse_mode="HTML",
+        reply_markup=my_link_keyboard(token)
+    )
+
+
+# ─── /mystats ─────────────────────────────────────────────────────────────────
+
+@router.message(Command("mystats"))
+async def cmd_mystats(message: Message):
+    user_id = message.from_user.id
+    stats = db.get_user_stats(user_id)
+    user_data = db.get_user_by_id(user_id)
+    if not user_data:
+        await message.answer("❌ Сначала отправь /start.")
+        return
+
+    unanswered = stats["received"] - stats["answered"]
+    await message.answer(
+        "📊 <b>Твоя статистика</b>\n\n"
+        f"📥 Получено вопросов: <b>{stats['received']}</b>\n"
+        f"✅ Отвечено: <b>{stats['answered']}</b>\n"
+        f"⏳ Без ответа: <b>{unanswered}</b>\n"
+        f"📤 Отправлено анонимок: <b>{stats['sent']}</b>",
+        parse_mode="HTML"
+    )
+
+
+# ─── /link ────────────────────────────────────────────────────────────────────
+
+@router.message(Command("link"))
+async def cmd_link(message: Message):
+    user_id = message.from_user.id
+    user_data = db.get_user_by_id(user_id)
+    if not user_data:
+        await message.answer("❌ Сначала отправь /start.")
+        return
+    token = user_data["link_token"]
+    link = f"https://t.me/{BOT_USERNAME}?start={token}"
+    await message.answer(
+        "🔗 <b>Твоя ссылка для анонимных вопросов:</b>\n\n"
+        f"<blockquote>{link}</blockquote>\n"
+        "Поделись ею с друзьями!",
         parse_mode="HTML",
         reply_markup=my_link_keyboard(token)
     )
