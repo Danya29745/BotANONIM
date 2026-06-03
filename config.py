@@ -11,6 +11,10 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 # ─── DATABASE ─────────────────────────────────────────────────────────────────
 DB_PATH = "whisperlink.db"
 
+# ─── WELCOME PHOTO ────────────────────────────────────────────────────────────
+# Прямая ссылка на приветственное фото (URL или Telegram file_id)
+WELCOME_PHOTO = os.getenv("WELCOME_PHOTO", "https://i.ibb.co/qYXr0s5p/7965055989-2949f016.jpg")
+
 # ─── VALIDATION ───────────────────────────────────────────────────────────────
 if not BOT_TOKEN:
     raise ValueError("Переменная окружения BOT_TOKEN не задана!")
