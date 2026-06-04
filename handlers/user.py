@@ -133,7 +133,8 @@ async def cmd_start(message: Message, bot: Bot, state: FSMContext):
         f"<blockquote>{link}</blockquote>"
     )
     # Убираем старую ReplyKeyboard если она осталась у пользователя
-    await message.answer("​", reply_markup=ReplyKeyboardRemove())
+    tmp = await message.answer("\u200b", reply_markup=ReplyKeyboardRemove())
+    await tmp.delete()
     if WELCOME_PHOTO:
         await message.answer_photo(
             photo=WELCOME_PHOTO,
