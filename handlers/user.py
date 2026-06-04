@@ -111,6 +111,9 @@ async def cmd_start(message: Message, bot: Bot, state: FSMContext):
     if token_arg and token_arg != user_data["link_token"]:
         owner = db.get_user_by_token(token_arg)
         if owner:
+            if db.get_link_disabled(owner["user_id"]):
+                await message.answer("❌ Этот пользователь отключил приём анонимных сообщений.")
+                return
             await state.set_state(AskState.waiting_question)
             await state.update_data(owner_id=owner["user_id"], asker_id=user_id, owner_token=token_arg)
             name = owner.get("full_name") or "этого человека"
@@ -199,6 +202,9 @@ async def callback_check_sub(call: CallbackQuery, bot: Bot, state: FSMContext):
     if token_arg and token_arg != user_data["link_token"]:
         owner = db.get_user_by_token(token_arg)
         if owner:
+            if db.get_link_disabled(owner["user_id"]):
+                await call.message.answer("❌ Этот пользователь отключил приём анонимных сообщений.")
+                return
             await state.set_state(AskState.waiting_question)
             await state.update_data(owner_id=owner["user_id"], asker_id=user_id, owner_token=token_arg)
             name = owner.get("full_name") or "этого человека"
@@ -399,7 +405,33 @@ async def cmd_qs(message: Message):
     await message.answer("\n".join(lines), parse_mode="HTML")
 
 
-# ─── Reveal identity — send invoice ───────────────────────────────────────────
+# ─── /link_q — toggle link on/off ────────────────────────────────────────────
+
+@router.message(Command("link_q"))
+async def cmd_link_q(message: Message):
+    user_id = message.from_user.id
+    user_data = db.get_user_by_id(user_id)
+    if not user_data:
+        await message.answer("❌ Сначала отправь /start.")
+        return
+
+    current = db.get_link_disabled(user_id)
+    new_state = not current
+    db.set_link_disabled(user_id, new_state)
+
+    if new_state:
+        await message.answer(
+            "🔴 <b>Ссылка отключена.</b>\n\n"
+            "Теперь никто не может отправить тебе анонимное сообщение по ссылке.\n"
+            "Чтобы включить — отправь /link_q ещё раз.",
+            parse_mode="HTML"
+        )
+    else:
+        await message.answer(
+            "🟢 <b>Ссылка включена.</b>\n\n"
+            "Теперь по твоей ссылке снова можно отправлять анонимные сообщения.",
+            parse_mode="HTML"
+        )
 
 @router.callback_query(F.data.startswith("reveal:"))
 async def cb_reveal(call: CallbackQuery, bot: Bot):
