@@ -2,7 +2,6 @@ from aiogram import Router, Bot, F
 from aiogram.types import (
     Message, InlineKeyboardMarkup, InlineKeyboardButton,
     CallbackQuery, LabeledPrice, PreCheckoutQuery,
-    ReplyKeyboardRemove,
 )
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
@@ -116,8 +115,7 @@ async def cmd_start(message: Message, bot: Bot, state: FSMContext):
             await state.update_data(owner_id=owner["user_id"], asker_id=user_id, owner_token=token_arg)
             name = owner.get("full_name") or "этого человека"
             await message.answer(
-                f"🤫 Ты перешёл по ссылке <b>{name}</b>.\n\n"
-                "Напиши анонимное сообщение — отправитель останется неизвестным:",
+                f"🤫 Напиши анонимное сообщение — <b>{name}</b> не узнает, кто ты:",
                 parse_mode="HTML"
             )
             return
@@ -130,11 +128,10 @@ async def cmd_start(message: Message, bot: Bot, state: FSMContext):
         "👋 Привет! Это <b>SlyAsk</b> — анонимные вопросы и сообщения.\n\n"
         "Скопируй свою ссылку и размести её в TikTok, Instagram, сторис или где угодно — "
         "и тебе начнут писать анонимно:\n\n"
-        f"<blockquote>{link}</blockquote>"
+        "┌─────────────────────────\n"
+        f"│ <code>{link}</code>\n"
+        "└─────────────────────────"
     )
-    # Убираем старую ReplyKeyboard если она осталась у пользователя
-    tmp = await message.answer(".", reply_markup=ReplyKeyboardRemove())
-    await tmp.delete()
     if WELCOME_PHOTO:
         await message.answer_photo(
             photo=WELCOME_PHOTO,
@@ -162,7 +159,9 @@ async def cb_main_menu(call: CallbackQuery, state: FSMContext):
     await call.message.answer(
         "🏠 <b>Главное меню</b>\n\n"
         "Твоя ссылка — скопируй и размести в TikTok, Instagram или сторис:\n\n"
-        f"<blockquote>{link}</blockquote>",
+        "┌─────────────────────────\n"
+        f"│ <code>{link}</code>\n"
+        "└─────────────────────────",
         parse_mode="HTML",
         reply_markup=my_link_keyboard(token)
     )
@@ -195,8 +194,7 @@ async def callback_check_sub(call: CallbackQuery, bot: Bot, state: FSMContext):
             await state.update_data(owner_id=owner["user_id"], asker_id=user_id, owner_token=token_arg)
             name = owner.get("full_name") or "этого человека"
             await call.message.answer(
-                f"🤫 Ты перешёл по ссылке <b>{name}</b>.\n\n"
-                "Напиши анонимное сообщение:",
+                f"🤫 Напиши анонимное сообщение — <b>{name}</b> не узнает, кто ты:",
                 parse_mode="HTML"
             )
             return
@@ -334,7 +332,9 @@ async def cmd_link(message: Message):
     link = f"https://t.me/{BOT_USERNAME}?start={token}"
     await message.answer(
         "🔗 <b>Твоя ссылка для анонимных сообщений:</b>\n\n"
-        f"<blockquote>{link}</blockquote>\n"
+        "┌─────────────────────────\n"
+        f"│ <code>{link}</code>\n"
+        "└─────────────────────────\n\n"
         "Скопируй и размести в TikTok, Instagram, сторис или отправь друзьям!",
         parse_mode="HTML",
         reply_markup=my_link_keyboard(token)
