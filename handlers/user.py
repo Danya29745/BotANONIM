@@ -2,6 +2,7 @@ from aiogram import Router, Bot, F
 from aiogram.types import (
     Message, InlineKeyboardMarkup, InlineKeyboardButton,
     CallbackQuery, LabeledPrice, PreCheckoutQuery,
+    ReplyKeyboardRemove,
 )
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
@@ -127,9 +128,12 @@ async def cmd_start(message: Message, bot: Bot, state: FSMContext):
     link = f"https://t.me/{BOT_USERNAME}?start={token}"
     text = (
         "👋 Привет! Это <b>SlyAsk</b> — анонимные вопросы и сообщения.\n\n"
-        "Поделись своей ссылкой — и тебе начнут писать анонимно:\n\n"
-        f"<code>https://t.me/{BOT_USERNAME}?start={token}</code>"
+        "Скопируй свою ссылку и размести её в TikTok, Instagram, сторис или где угодно — "
+        "и тебе начнут писать анонимно:\n\n"
+        f"<blockquote>{link}</blockquote>"
     )
+    # Убираем старую ReplyKeyboard если она осталась у пользователя
+    await message.answer("​", reply_markup=ReplyKeyboardRemove())
     if WELCOME_PHOTO:
         await message.answer_photo(
             photo=WELCOME_PHOTO,
@@ -156,8 +160,8 @@ async def cb_main_menu(call: CallbackQuery, state: FSMContext):
     link = f"https://t.me/{BOT_USERNAME}?start={token}"
     await call.message.answer(
         "🏠 <b>Главное меню</b>\n\n"
-        "Твоя ссылка для анонимных сообщений:\n\n"
-        f"<code>{link}</code>",
+        "Твоя ссылка — скопируй и размести в TikTok, Instagram или сторис:\n\n"
+        f"<blockquote>{link}</blockquote>",
         parse_mode="HTML",
         reply_markup=my_link_keyboard(token)
     )
@@ -329,8 +333,8 @@ async def cmd_link(message: Message):
     link = f"https://t.me/{BOT_USERNAME}?start={token}"
     await message.answer(
         "🔗 <b>Твоя ссылка для анонимных сообщений:</b>\n\n"
-        f"<code>{link}</code>\n\n"
-        "Поделись ею с друзьями!",
+        f"<blockquote>{link}</blockquote>\n"
+        "Скопируй и размести в TikTok, Instagram, сторис или отправь друзьям!",
         parse_mode="HTML",
         reply_markup=my_link_keyboard(token)
     )
