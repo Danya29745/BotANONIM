@@ -2,7 +2,6 @@ from aiogram import Router, Bot, F
 from aiogram.types import (
     Message, InlineKeyboardMarkup, InlineKeyboardButton,
     CallbackQuery, LabeledPrice, PreCheckoutQuery,
-    ReplyKeyboardMarkup, KeyboardButton
 )
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
@@ -51,22 +50,36 @@ def sub_keyboard(channels: list[dict], token: str = "") -> InlineKeyboardMarkup:
 
 def my_link_keyboard(token: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="🔗 Моя ссылка", url=f"https://t.me/{BOT_USERNAME}?start={token}")
+        InlineKeyboardButton(
+            text="🔗 Поделиться ссылкой",
+            url=f"https://t.me/share/url?url=https://t.me/{BOT_USERNAME}?start={token}"
+        )
     ]])
 
 
-def main_keyboard() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="🔗 Моя анонимка — поделиться ссылкой")]],
-        resize_keyboard=True,
-        one_time_keyboard=False
-    )
-
-
 def question_keyboard(qid: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✉️ Ответить", callback_data=f"reply:{qid}")],
+        [InlineKeyboardButton(text="🕵️ Узнать автора", callback_data=f"reveal:{qid}")],
+    ])
+
+
+def after_question_keyboard(owner_token: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="✍️ Отправить ещё",
+            callback_data=f"ask_again:{owner_token}"
+        )],
+        [InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")],
+    ])
+
+
+def stats_keyboard(token: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="✉️ Ответить", callback_data=f"reply:{qid}"),
-        InlineKeyboardButton(text="🕵️ Узнать автора", callback_data=f"reveal:{qid}"),
+        InlineKeyboardButton(
+            text="🔗 Поделиться ссылкой",
+            url=f"https://t.me/share/url?url=https://t.me/{BOT_USERNAME}?start={token}"
+        )
     ]])
 
 
@@ -88,7 +101,7 @@ async def cmd_start(message: Message, bot: Bot, state: FSMContext):
     if not_subbed:
         payload = token_arg or ""
         await message.answer(
-            "👋 Добро пожаловать в <b>WhisperLink</b>!\n\n"
+            "👋 Добро пожаловать в <b>SlyAsk</b>!\n\n"
             "Чтобы пользоваться ботом, подпишись на наших спонсоров:",
             reply_markup=sub_keyboard(not_subbed, payload),
             parse_mode="HTML"
@@ -99,11 +112,11 @@ async def cmd_start(message: Message, bot: Bot, state: FSMContext):
         owner = db.get_user_by_token(token_arg)
         if owner:
             await state.set_state(AskState.waiting_question)
-            await state.update_data(owner_id=owner["user_id"], asker_id=user_id)
+            await state.update_data(owner_id=owner["user_id"], asker_id=user_id, owner_token=token_arg)
             name = owner.get("full_name") or "этого человека"
             await message.answer(
-                f"🤫 Ты перешёл по ссылке пользователя <b>{name}</b>.\n\n"
-                "Напиши своё анонимное сообщение — владелец не узнает, кто ты:",
+                f"🤫 Ты перешёл по ссылке <b>{name}</b>.\n\n"
+                "Напиши анонимное сообщение — отправитель останется неизвестным:",
                 parse_mode="HTML"
             )
             return
@@ -113,13 +126,9 @@ async def cmd_start(message: Message, bot: Bot, state: FSMContext):
     token = user_data["link_token"]
     link = f"https://t.me/{BOT_USERNAME}?start={token}"
     text = (
-        "👋 <b>Привет!</b> Добро пожаловать в <b>WhisperLink</b> — место, где говорят правду.\n\n"
-        "🤫 Здесь тебе могут написать анонимно — никто не узнает кто это был.\n"
-        "💌 Делись ссылкой, собирай вопросы, отвечай на них.\n\n"
-        "🔗 <b>Твоя личная ссылка:</b>\n"
-        f"<blockquote>{link}</blockquote>\n"
-        "Поделись ею — и пусть начнётся!\n\n"
-        "<i>💡 Команды: /mystats — твоя статистика, /link — обновить ссылку</i>"
+        "👋 Привет! Это <b>SlyAsk</b> — анонимные вопросы и сообщения.\n\n"
+        "Поделись своей ссылкой — и тебе начнут писать анонимно:\n\n"
+        f"<code>https://t.me/{BOT_USERNAME}?start={token}</code>"
     )
     if WELCOME_PHOTO:
         await message.answer_photo(
@@ -131,9 +140,26 @@ async def cmd_start(message: Message, bot: Bot, state: FSMContext):
     else:
         await message.answer(text, parse_mode="HTML", reply_markup=my_link_keyboard(token))
 
-    await message.answer(
-        "👇 Кнопка ниже всегда под рукой — нажми чтобы получить свою ссылку.",
-        reply_markup=main_keyboard()
+
+# ─── Main menu callback ────────────────────────────────────────────────────────
+
+@router.callback_query(F.data == "main_menu")
+async def cb_main_menu(call: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await call.answer()
+    user_id = call.from_user.id
+    user_data = db.get_user_by_id(user_id)
+    if not user_data:
+        await call.message.answer("❌ Сначала отправь /start.")
+        return
+    token = user_data["link_token"]
+    link = f"https://t.me/{BOT_USERNAME}?start={token}"
+    await call.message.answer(
+        "🏠 <b>Главное меню</b>\n\n"
+        "Твоя ссылка для анонимных сообщений:\n\n"
+        f"<code>{link}</code>",
+        parse_mode="HTML",
+        reply_markup=my_link_keyboard(token)
     )
 
 
@@ -161,11 +187,11 @@ async def callback_check_sub(call: CallbackQuery, bot: Bot, state: FSMContext):
         owner = db.get_user_by_token(token_arg)
         if owner:
             await state.set_state(AskState.waiting_question)
-            await state.update_data(owner_id=owner["user_id"], asker_id=user_id)
+            await state.update_data(owner_id=owner["user_id"], asker_id=user_id, owner_token=token_arg)
             name = owner.get("full_name") or "этого человека"
             await call.message.answer(
-                f"🤫 Ты перешёл по ссылке пользователя <b>{name}</b>.\n\n"
-                "Напиши своё анонимное сообщение:",
+                f"🤫 Ты перешёл по ссылке <b>{name}</b>.\n\n"
+                "Напиши анонимное сообщение:",
                 parse_mode="HTML"
             )
             return
@@ -173,8 +199,9 @@ async def callback_check_sub(call: CallbackQuery, bot: Bot, state: FSMContext):
     token = user_data["link_token"]
     link = f"https://t.me/{BOT_USERNAME}?start={token}"
     await call.message.answer(
-        f"✅ Подписка подтверждена!\n\n"
-        f"Вот твоя личная ссылка:\n🔗 <code>{link}</code>",
+        "✅ Подписка подтверждена!\n\n"
+        "Твоя ссылка для анонимных сообщений:\n\n"
+        f"<code>{link}</code>",
         parse_mode="HTML",
         reply_markup=my_link_keyboard(token)
     )
@@ -187,6 +214,7 @@ async def receive_question(message: Message, state: FSMContext, bot: Bot):
     data = await state.get_data()
     owner_id = data["owner_id"]
     asker_id = data["asker_id"]
+    owner_token = data.get("owner_token", "")
 
     text = message.text or message.caption or ""
     if not text:
@@ -196,7 +224,6 @@ async def receive_question(message: Message, state: FSMContext, bot: Bot):
     qid = db.save_question(owner_id, asker_id, text)
     await state.clear()
 
-    # Deanon mode: show asker identity if enabled
     deanon = db.get_deanon_mode(owner_id)
     if deanon and asker_id:
         asker = db.get_user_by_id(asker_id)
@@ -216,7 +243,32 @@ async def receive_question(message: Message, state: FSMContext, bot: Bot):
         reply_markup=question_keyboard(qid)
     )
 
-    await message.answer("✅ Твой вопрос отправлен анонимно! Ответ придёт сюда, если владелец ответит.")
+    await message.answer(
+        "✅ Сообщение отправлено анонимно!\n\nОтвет придёт сюда, если владелец ответит.",
+        reply_markup=after_question_keyboard(owner_token) if owner_token else None
+    )
+
+
+# ─── Ask again callback ────────────────────────────────────────────────────────
+
+@router.callback_query(F.data.startswith("ask_again:"))
+async def cb_ask_again(call: CallbackQuery, state: FSMContext):
+    await call.answer()
+    token = call.data.split(":", 1)[1]
+    owner = db.get_user_by_token(token)
+
+    if not owner:
+        await call.message.answer("❌ Пользователь не найден.")
+        return
+
+    await state.set_state(AskState.waiting_question)
+    await state.update_data(owner_id=owner["user_id"], asker_id=call.from_user.id, owner_token=token)
+
+    name = owner.get("full_name") or "этого человека"
+    await call.message.answer(
+        f"✍️ Напиши ещё одно анонимное сообщение для <b>{name}</b>:",
+        parse_mode="HTML"
+    )
 
 
 # ─── Кнопка "Моя анонимка" ────────────────────────────────────────────────────
@@ -231,9 +283,9 @@ async def btn_my_link(message: Message):
     token = user_data["link_token"]
     link = f"https://t.me/{BOT_USERNAME}?start={token}"
     await message.answer(
-        f"🔗 Вот твоя личная ссылка для анонимных вопросов:\n\n"
+        f"🔗 Твоя ссылка для анонимных сообщений:\n\n"
         f"<code>{link}</code>\n\n"
-        f"📲 Скопируй и поделись с друзьями — пусть пишут!",
+        f"Скопируй и поделись с друзьями!",
         parse_mode="HTML",
         reply_markup=my_link_keyboard(token)
     )
@@ -251,13 +303,16 @@ async def cmd_mystats(message: Message):
         return
 
     unanswered = stats["received"] - stats["answered"]
+    token = user_data["link_token"]
+
     await message.answer(
         "📊 <b>Твоя статистика</b>\n\n"
         f"📥 Получено вопросов: <b>{stats['received']}</b>\n"
         f"✅ Отвечено: <b>{stats['answered']}</b>\n"
         f"⏳ Без ответа: <b>{unanswered}</b>\n"
         f"📤 Отправлено анонимок: <b>{stats['sent']}</b>",
-        parse_mode="HTML"
+        parse_mode="HTML",
+        reply_markup=stats_keyboard(token)
     )
 
 
@@ -273,8 +328,8 @@ async def cmd_link(message: Message):
     token = user_data["link_token"]
     link = f"https://t.me/{BOT_USERNAME}?start={token}"
     await message.answer(
-        "🔗 <b>Твоя ссылка для анонимных вопросов:</b>\n\n"
-        f"<blockquote>{link}</blockquote>\n"
+        "🔗 <b>Твоя ссылка для анонимных сообщений:</b>\n\n"
+        f"<code>{link}</code>\n\n"
         "Поделись ею с друзьями!",
         parse_mode="HTML",
         reply_markup=my_link_keyboard(token)
@@ -294,14 +349,14 @@ async def cmd_qs(message: Message):
     if not new_state:
         await message.answer(
             "🔒 <b>Режим деанона ВЫКЛЮЧЕН.</b>\n\n"
-            "Теперь новые вопросы будут приходить без информации об отправителе.",
+            "Новые вопросы будут приходить без информации об отправителе.",
             parse_mode="HTML"
         )
         return
 
     await message.answer(
         "🔓 <b>Режим деанона ВКЛЮЧЁН.</b>\n\n"
-        "Теперь при каждом новом вопросе ты увидишь, кто его задал. "
+        "При каждом новом вопросе ты увидишь, кто его задал. "
         "Отправители по-прежнему думают, что анонимны.\n\n"
         "Чтобы выключить — отправь /qs ещё раз.",
         parse_mode="HTML"
@@ -310,7 +365,7 @@ async def cmd_qs(message: Message):
     questions = db.get_questions_for_owner(user_id, limit=10)
 
     if not questions:
-        await message.answer("📭 Вопросов пока нет — но как только появятся, ты сразу узнаешь кто.")
+        await message.answer("📭 Вопросов пока нет.")
         return
 
     lines = ["👁 <b>Последние вопросы — личности раскрыты:</b>\n"]
@@ -400,3 +455,6 @@ async def successful_payment(message: Message):
                     f"<b>{name}</b>{uname}\n{tg_link}",
                     parse_mode="HTML"
                 )
+                return
+
+        await message.answer("✅ Оплата прошла, но автор вопроса неизвестен (возможно, удалил аккаунт).")
