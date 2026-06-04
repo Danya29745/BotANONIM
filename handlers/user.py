@@ -51,8 +51,8 @@ def sub_keyboard(channels: list[dict], token: str = "") -> InlineKeyboardMarkup:
 def my_link_keyboard(token: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(
-            text="🔗 Поделиться ссылкой",
-            url=f"https://t.me/share/url?url=https://t.me/{BOT_USERNAME}?start={token}"
+            text="📋 Скопировать ссылку",
+            callback_data=f"copy_link:{token}"
         )
     ]])
 
@@ -128,9 +128,7 @@ async def cmd_start(message: Message, bot: Bot, state: FSMContext):
         "👋 Привет! Это <b>SlyAsk</b> — анонимные вопросы и сообщения.\n\n"
         "Скопируй свою ссылку и размести её в TikTok, Instagram, сторис или где угодно — "
         "и тебе начнут писать анонимно:\n\n"
-        "┌─────────────────────────\n"
-        f"│ <code>{link}</code>\n"
-        "└─────────────────────────"
+        f"<blockquote><code>{link}</code></blockquote>"
     )
     if WELCOME_PHOTO:
         await message.answer_photo(
@@ -141,6 +139,19 @@ async def cmd_start(message: Message, bot: Bot, state: FSMContext):
         )
     else:
         await message.answer(text, parse_mode="HTML", reply_markup=my_link_keyboard(token))
+
+
+# ─── Copy link callback ───────────────────────────────────────────────────────
+
+@router.callback_query(F.data.startswith("copy_link:"))
+async def cb_copy_link(call: CallbackQuery):
+    await call.answer()
+    token = call.data.split(":", 1)[1]
+    link = f"https://t.me/{BOT_USERNAME}?start={token}"
+    await call.message.answer(
+        f"<code>{link}</code>",
+        parse_mode="HTML"
+    )
 
 
 # ─── Main menu callback ────────────────────────────────────────────────────────
@@ -159,9 +170,7 @@ async def cb_main_menu(call: CallbackQuery, state: FSMContext):
     await call.message.answer(
         "🏠 <b>Главное меню</b>\n\n"
         "Твоя ссылка — скопируй и размести в TikTok, Instagram или сторис:\n\n"
-        "┌─────────────────────────\n"
-        f"│ <code>{link}</code>\n"
-        "└─────────────────────────",
+        f"<blockquote><code>{link}</code></blockquote>",
         parse_mode="HTML",
         reply_markup=my_link_keyboard(token)
     )
@@ -332,9 +341,7 @@ async def cmd_link(message: Message):
     link = f"https://t.me/{BOT_USERNAME}?start={token}"
     await message.answer(
         "🔗 <b>Твоя ссылка для анонимных сообщений:</b>\n\n"
-        "┌─────────────────────────\n"
-        f"│ <code>{link}</code>\n"
-        "└─────────────────────────\n\n"
+        f"<blockquote><code>{link}</code></blockquote>\n"
         "Скопируй и размести в TikTok, Instagram, сторис или отправь друзьям!",
         parse_mode="HTML",
         reply_markup=my_link_keyboard(token)
