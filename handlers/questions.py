@@ -12,7 +12,7 @@ class ReplyState(StatesGroup):
     waiting_answer = State()
 
 
-# ─── Owner presses "Ответить" button ─────────────────────────────────────────
+# ─── Owner presses "Ответить" button ──────────────────────────────────────────
 
 @router.callback_query(F.data.startswith("reply:"))
 async def cb_reply(call: CallbackQuery, state: FSMContext):
@@ -60,7 +60,6 @@ async def receive_answer(message: Message, state: FSMContext, bot: Bot):
 
     await message.answer(f"✅ Ответ на вопрос #{qid} отправлен!")
 
-    # Notify asker
     asker_id = question.get("asker_id")
     if asker_id:
         try:
@@ -69,14 +68,14 @@ async def receive_answer(message: Message, state: FSMContext, bot: Bot):
 
             reply_again_kb = None
             if owner_token:
-                from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
                 from config import BOT_USERNAME
-                reply_again_kb = InlineKeyboardMarkup(inline_keyboard=[[
-                    InlineKeyboardButton(
+                reply_again_kb = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(
                         text="✍️ Написать ещё",
                         callback_data=f"ask_again:{owner_token}"
-                    )
-                ]])
+                    )],
+                    [InlineKeyboardButton(text="🏠 Главное меню", callback_data="main_menu")],
+                ])
 
             await bot.send_message(
                 asker_id,
@@ -87,28 +86,4 @@ async def receive_answer(message: Message, state: FSMContext, bot: Bot):
                 reply_markup=reply_again_kb
             )
         except Exception:
-            pass  # User may have blocked the bot
-
-
-# ─── Ask again callback ────────────────────────────────────────────────────────
-
-@router.callback_query(F.data.startswith("ask_again:"))
-async def cb_ask_again(call: CallbackQuery, state: FSMContext):
-    from aiogram.fsm.state import State, StatesGroup
-    await call.answer()
-    token = call.data.split(":", 1)[1]
-    owner = db.get_user_by_token(token)
-
-    if not owner:
-        await call.message.answer("❌ Пользователь не найден.")
-        return
-
-    from handlers.user import AskState
-    await state.set_state(AskState.waiting_question)
-    await state.update_data(owner_id=owner["user_id"], asker_id=call.from_user.id)
-
-    name = owner.get("full_name") or "этого человека"
-    await call.message.answer(
-        f"✍️ Напиши ещё одно анонимное сообщение для <b>{name}</b>:",
-        parse_mode="HTML"
-    )
+            pass
