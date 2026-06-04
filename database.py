@@ -64,6 +64,16 @@ def init_db():
         pass  # Column already exists
     conn.close()
 
+    # Migration: add link_disabled column if missing
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute("ALTER TABLE users ADD COLUMN link_disabled INTEGER DEFAULT 0")
+        conn.commit()
+    except Exception:
+        pass  # Column already exists
+    conn.close()
+
 
 # ─── DEANON MODE ──────────────────────────────────────────────────────────────
 
@@ -80,6 +90,25 @@ def set_deanon_mode(user_id: int, enabled: bool):
     conn = get_conn()
     cur = conn.cursor()
     cur.execute("UPDATE users SET deanon_mode = ? WHERE user_id = ?", (int(enabled), user_id))
+    conn.commit()
+    conn.close()
+
+
+# ─── LINK DISABLED ────────────────────────────────────────────────────────────
+
+def get_link_disabled(user_id: int) -> bool:
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT link_disabled FROM users WHERE user_id = ?", (user_id,))
+    row = cur.fetchone()
+    conn.close()
+    return bool(row["link_disabled"]) if row else False
+
+
+def set_link_disabled(user_id: int, disabled: bool):
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("UPDATE users SET link_disabled = ? WHERE user_id = ?", (int(disabled), user_id))
     conn.commit()
     conn.close()
 
